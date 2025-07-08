@@ -1,0 +1,18 @@
+[0:00:03 -> 0:00:04] SPEAKER_01: You can see it.
+
+[0:00:08 -> 0:00:10] SPEAKER_01: It's William, right? Or Vinicius?  It's Allison.
+
+[0:00:10 -> 0:00:11] SPEAKER_00: It's Allison.  Allison! My goodness, I'm sick of the term.
+
+[0:00:16 -> 0:00:19] SPEAKER_01: Itaipu hydroelectric plant in Castilian, Itaipu, in Guarani, Itaipu,
+
+[0:00:22 -> 0:00:36] SPEAKER_01: is a bi-national hydroelectric plant located in the Paraná River,  on the border between Brazil and Paraguay.  The dam was built by the two countries between 1975 and 1982.  The name Itaipu was taken from an island that existed near the construction site.
+
+[0:00:36 -> 0:00:41] SPEAKER_01: The name Itaipu was taken from an island that existed near the construction site.
+
+[0:00:42 -> 0:00:46] SPEAKER_01: In Tupi language, the term means stone in which water makes noise,
+
+[0:00:52 -> 0:00:53] SPEAKER_01: through the junction of the terms Ita, stone, I, water and Pu, noise.  When it was completed, it was the largest dam in the world,
+
+[0:00:53 -> 0:00:56] SPEAKER_01: When it was completed, it was the largest dam in the world,
+

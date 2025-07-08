@@ -1,0 +1,13 @@
+# Não versionar variáveis secretas
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+
+# Temporários
+temp_*.wav
