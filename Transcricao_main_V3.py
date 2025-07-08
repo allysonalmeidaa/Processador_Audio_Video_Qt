@@ -195,7 +195,7 @@ class SobreTab(QWidget):
         super().__init__()
         layout = QVBoxLayout()
         lbl = QLabel(
-            "<b>Transcrição com Whisper (Qt)</b><br>"
+            "<b>Processador de Áudio e Vídeo (Qt)</b><br>"
             "Desenvolvido por Allyson Almeida Sirvano<br>"
             "Sob a supervisão de Mauricio Menon<br>"
             "Data: Junho/2025<br>"
@@ -211,7 +211,7 @@ class SobreTab(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Transcrição com Whisper (Qt)")
+        self.setWindowTitle("Processador de Áudio e Vídeo (Qt)")
         icon_path = os.path.join(os.path.dirname(__file__), "microphone2.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
