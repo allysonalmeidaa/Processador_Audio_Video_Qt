@@ -51,7 +51,17 @@ class ConversaoTab(QWidget):
         self.result_area.setReadOnly(True)
         layout.addWidget(self.result_area)
 
+        # --------- NOVO: Botão de download dos arquivos convertidos ---------
+        self.btn_download_convertidos = QPushButton("Baixar Arquivo(s) Convertido(s)")
+        self.btn_download_convertidos.setEnabled(False)
+        self.btn_download_convertidos.clicked.connect(self.baixar_convertidos)
+        layout.addWidget(self.btn_download_convertidos)
+        # --------- FIM NOVO ---------
+
         self.setLayout(layout)
+
+        # Para armazenar os arquivos convertidos da última operação
+        self._arquivos_convertidos = []
 
     def selecionar_arquivo(self):
         fname, _ = QFileDialog.getOpenFileName(
@@ -80,14 +90,41 @@ class ConversaoTab(QWidget):
         os.makedirs(saida_dir, exist_ok=True)
 
         self.result_area.setPlainText("Processando...\n")
+        self._arquivos_convertidos = []  # Limpa antes de nova operação
+        self.btn_download_convertidos.setEnabled(False)
         try:
             caminho_video, arquivos_gerados = processar_video(origem, saida_dir, formatos)
             if arquivos_gerados:
+                self._arquivos_convertidos = arquivos_gerados
                 msg = "Arquivos gerados com sucesso:\n\n"
                 for f in arquivos_gerados:
                     msg += f"{os.path.basename(f)}\n"
                 self.result_area.setPlainText(msg)
+                self.btn_download_convertidos.setEnabled(True)
             else:
                 self.result_area.setPlainText("Nenhum arquivo foi gerado.")
+                self.btn_download_convertidos.setEnabled(False)
         except Exception as e:
             self.result_area.setPlainText(f"Erro durante o processamento:\n{str(e)}")
+            self._arquivos_convertidos = []
+            self.btn_download_convertidos.setEnabled(False)
+
+    def baixar_convertidos(self):
+        if not self._arquivos_convertidos:
+            QMessageBox.warning(self, "Aviso", "Nenhum arquivo convertido para baixar.")
+            return
+
+        for caminho_original in self._arquivos_convertidos:
+            nome_sugestao = os.path.basename(caminho_original)
+            caminho_destino, _ = QFileDialog.getSaveFileName(
+                self,
+                f"Salvar {nome_sugestao} como...",
+                nome_sugestao,
+                "Todos os Arquivos (*.*)"
+            )
+            if caminho_destino:
+                try:
+                    with open(caminho_original, "rb") as src, open(caminho_destino, "wb") as dst:
+                        dst.write(src.read())
+                except Exception as e:
+                    QMessageBox.critical(self, "Erro ao salvar", f"Não foi possível salvar {nome_sugestao}: {str(e)}")

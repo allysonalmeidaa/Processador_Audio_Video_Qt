@@ -1,4 +1,5 @@
 {
-  "modelo": "medium",
-  "max_historico": 20
+  "modelo": "tiny",
+  "max_historico": 20,
+  "idioma": "pt"
 }

@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -8,9 +9,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from Transcricao_core_V3 import transcrever_com_diarizacao
 
-PASTA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+def get_app_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+PASTA_SCRIPT = get_app_dir()
 HISTORICO_PATH = os.path.join(PASTA_SCRIPT, "historico.json")
 CONFIG_PATH = os.path.join(PASTA_SCRIPT, "config.json")
+TRANSCRICOES_DIR = os.path.join(PASTA_SCRIPT, "Transcricoes")
 
 IDIOMAS = [
     ("auto", "Detectar automático"),
@@ -28,7 +35,6 @@ class DropLabel(QLabel):
         self.setAcceptDrops(True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setText("Arraste e solte um arquivo de áudio ou vídeo aqui")
-        # Fonte e tamanho padronizados (igual QLabel padrão)
         self.setStyleSheet("""
             QLabel {
                 background: #2d3238;
@@ -84,25 +90,16 @@ class TranscricaoTab(QWidget):
         layout_esquerda.setContentsMargins(8, 4, 4, 8)
         layout_esquerda.setSpacing(3)
 
-        # Layout horizontal para modelo/idioma/arquivo
         hlayout = QHBoxLayout()
         hlayout.setContentsMargins(0, 0, 0, 0)
         hlayout.setSpacing(10)
         self.label_modelo = QLabel("Modelo Whisper:")
         self.combo_modelos = QComboBox()
         self.combo_modelos.addItems(["tiny", "base", "small", "medium", "large"])
-        self.combo_modelos.setCurrentText(self.config.get("modelo", "small"))
         self.label_idioma = QLabel("Idioma:")
         self.combo_idioma = QComboBox()
         for cod, nome in IDIOMAS:
             self.combo_idioma.addItem(nome, cod)
-        idx_idioma = 0
-        config_idioma = self.config.get("idioma", "auto")
-        for i, (cod, nome) in enumerate(IDIOMAS):
-            if cod == config_idioma:
-                idx_idioma = i
-                break
-        self.combo_idioma.setCurrentIndex(idx_idioma)
         hlayout.addWidget(self.label_modelo)
         hlayout.addWidget(self.combo_modelos)
         hlayout.addSpacing(10)
@@ -134,7 +131,6 @@ class TranscricaoTab(QWidget):
         self.progress.setVisible(False)
         layout_esquerda.addWidget(self.progress)
 
-        # DropLabel padronizado
         self.drop_area = DropLabel()
         self.drop_area.setFixedHeight(40)
         self.drop_area.fileDropped.connect(self.arquivo_arrastado)
@@ -145,7 +141,16 @@ class TranscricaoTab(QWidget):
         self.texto_transcricao.setMinimumHeight(200)
         layout_esquerda.addWidget(self.texto_transcricao)
 
-        # Lateral direita: busca + histórico
+        btns_download_layout = QHBoxLayout()
+        self.btn_download_transcricao = QPushButton("Baixar Transcrição")
+        self.btn_download_transcricao.clicked.connect(self.baixar_transcricao)
+        btns_download_layout.addWidget(self.btn_download_transcricao)
+        self.btn_download_traducao = QPushButton("Baixar Tradução (EN)")
+        self.btn_download_traducao.clicked.connect(self.baixar_traducao)
+        btns_download_layout.addWidget(self.btn_download_traducao)
+        self.btn_download_traducao.setEnabled(False)
+        layout_esquerda.addLayout(btns_download_layout)
+
         self.busca_historico = QLineEdit()
         self.busca_historico.setPlaceholderText("Buscar no histórico...")
         self.busca_historico.textChanged.connect(self.filtrar_historico)
@@ -171,8 +176,9 @@ class TranscricaoTab(QWidget):
         self.setLayout(layout_principal)
 
         self.thread = None
-        self._historico_cache = []
+
         self.carregar_historico()
+        self.atualizar_config_interface()  # <--- Garante que modelo/idioma iniciais sejam os do config
 
     def carregar_config(self):
         if os.path.exists(CONFIG_PATH):
@@ -183,17 +189,28 @@ class TranscricaoTab(QWidget):
                 return {}
         return {}
 
+    def atualizar_config_interface(self):
+        """Atualiza combo_modelos e combo_idioma com base no config.json."""
+        self.config = self.carregar_config()
+        modelo_salvo = self.config.get("modelo", "small")
+        idx_modelo = self.combo_modelos.findText(modelo_salvo)
+        if idx_modelo >= 0:
+            self.combo_modelos.setCurrentIndex(idx_modelo)
+        else:
+            self.combo_modelos.setCurrentIndex(2)  # "small"
+        config_idioma = self.config.get("idioma", "auto")
+        idx_idioma = 0
+        for i, (cod, nome) in enumerate(IDIOMAS):
+            if cod == config_idioma:
+                idx_idioma = i
+                break
+        self.combo_idioma.setCurrentIndex(idx_idioma)
+
     def salvar_config(self, novo_config):
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(novo_config, f, indent=2, ensure_ascii=False)
         self.config = novo_config
-        self.combo_modelos.setCurrentText(novo_config.get("modelo", "small"))
-        idx_idioma = 0
-        for i, (cod, nome) in enumerate(IDIOMAS):
-            if cod == novo_config.get("idioma", "auto"):
-                idx_idioma = i
-                break
-        self.combo_idioma.setCurrentIndex(idx_idioma)
+        self.atualizar_config_interface()
 
     def selecionar_arquivo(self):
         fname, _ = QFileDialog.getOpenFileName(
@@ -237,6 +254,9 @@ class TranscricaoTab(QWidget):
         self.progress.setVisible(False)
         self.label_status.setText("Pronto!")
         self.adicionar_ao_historico()
+        base = os.path.splitext(os.path.basename(self.caminho_arquivo))[0]
+        caminho_trad = os.path.join(TRANSCRICOES_DIR, f"transcricao_{base}_ingles.txt")
+        self.btn_download_traducao.setEnabled(os.path.exists(caminho_trad))
 
     def exibir_erro(self, mensagem):
         self.texto_transcricao.setPlainText("Erro durante a transcrição:\n" + mensagem)
@@ -245,41 +265,44 @@ class TranscricaoTab(QWidget):
 
     def adicionar_ao_historico(self):
         base = os.path.splitext(os.path.basename(self.caminho_arquivo))[0]
-        pasta = os.path.dirname(os.path.abspath(__file__))
-        caminho_transcr = os.path.join(pasta, "Transcricoes", f"transcricao_{base}.txt")
+        nome_transcricao = f"transcricao_{base}.txt"
         idioma_cod = self.combo_idioma.currentData()
         data = {
-            "arquivo": caminho_transcr,
-            "nome": f"transcricao_{base}.txt",
+            "arquivo": nome_transcricao,
+            "nome": nome_transcricao,
             "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "idioma": idioma_cod
         }
-        historico = []
-        if os.path.exists(HISTORICO_PATH):
-            try:
-                with open(HISTORICO_PATH, "r", encoding="utf-8") as f:
-                    historico = json.load(f)
-            except Exception:
-                historico = []
+        historico = self._ler_historico_arquivo()
         historico = [h for h in historico if h["arquivo"] != data["arquivo"]]
         historico.insert(0, data)
         max_itens = self.config.get("max_historico", 20)
         historico = historico[:max_itens]
-        with open(HISTORICO_PATH, "w", encoding="utf-8") as f:
-            json.dump(historico, f, indent=2, ensure_ascii=False)
+        self._salvar_historico_arquivo(historico)
         self.carregar_historico()
 
     def carregar_historico(self):
+        historico = self._ler_historico_arquivo()
+        self._historico_cache = historico
+        self.filtrar_historico(self.busca_historico.text())
+
+    def _ler_historico_arquivo(self):
         if os.path.exists(HISTORICO_PATH):
             try:
                 with open(HISTORICO_PATH, "r", encoding="utf-8") as f:
                     historico = json.load(f)
-                self._historico_cache = historico
+                    if isinstance(historico, list):
+                        return historico
             except Exception:
-                self._historico_cache = []
-        else:
-            self._historico_cache = []
-        self.filtrar_historico(self.busca_historico.text())
+                pass
+        return []
+
+    def _salvar_historico_arquivo(self, historico):
+        try:
+            with open(HISTORICO_PATH, "w", encoding="utf-8") as f:
+                json.dump(historico, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao salvar histórico: {str(e)}")
 
     def filtrar_historico(self, texto):
         texto = texto.strip().lower()
@@ -306,7 +329,8 @@ class TranscricaoTab(QWidget):
                 filtrados.append(h)
         if idx >= len(filtrados):
             return
-        caminho = filtrados[idx]["arquivo"]
+        nome_arquivo = filtrados[idx]["arquivo"]
+        caminho = os.path.join(TRANSCRICOES_DIR, nome_arquivo)
         if os.path.exists(caminho):
             with open(caminho, "r", encoding="utf-8") as f:
                 conteudo = f.read()
@@ -328,15 +352,59 @@ class TranscricaoTab(QWidget):
         if idx < 0 or idx >= len(filtrados):
             return
         to_remove = filtrados[idx]
-        self._historico_cache = [h for h in self._historico_cache if h != to_remove]
-        with open(HISTORICO_PATH, "w", encoding="utf-8") as f:
-            json.dump(self._historico_cache, f, indent=2, ensure_ascii=False)
+        historico = self._ler_historico_arquivo()
+        historico = [h for h in historico if h != to_remove]
+        self._salvar_historico_arquivo(historico)
         self.carregar_historico()
 
     def limpar_historico(self):
         resp = QMessageBox.question(self, "Limpar histórico", "Tem certeza que deseja apagar todo o histórico?")
         if resp == QMessageBox.StandardButton.Yes:
-            self._historico_cache = []
-            if os.path.exists(HISTORICO_PATH):
-                os.remove(HISTORICO_PATH)
+            try:
+                if os.path.exists(HISTORICO_PATH):
+                    os.remove(HISTORICO_PATH)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao apagar histórico: {str(e)}")
             self.carregar_historico()
+
+    # Funções de download
+    def baixar_transcricao(self):
+        if not self.caminho_arquivo:
+            QMessageBox.warning(self, "Aviso", "Nenhuma transcrição para baixar.")
+            return
+        base = os.path.splitext(os.path.basename(self.caminho_arquivo))[0]
+        nome_transcricao = f"transcricao_{base}.txt"
+        caminho_transcr = os.path.join(TRANSCRICOES_DIR, nome_transcricao)
+        if not os.path.exists(caminho_transcr):
+            QMessageBox.warning(self, "Aviso", "Arquivo de transcrição não encontrado.")
+            return
+        with open(caminho_transcr, "r", encoding="utf-8") as f:
+            texto = f.read()
+        nome_sugestao = nome_transcricao
+        self._salvar_com_dialogo(texto, nome_sugestao)
+
+    def baixar_traducao(self):
+        if not self.caminho_arquivo:
+            QMessageBox.warning(self, "Aviso", "Nenhuma tradução para baixar.")
+            return
+        base = os.path.splitext(os.path.basename(self.caminho_arquivo))[0]
+        nome_traducao = f"transcricao_{base}_ingles.txt"
+        caminho_trad = os.path.join(TRANSCRICOES_DIR, nome_traducao)
+        if not os.path.exists(caminho_trad):
+            QMessageBox.warning(self, "Aviso", "Arquivo de tradução não encontrado.")
+            return
+        with open(caminho_trad, "r", encoding="utf-8") as f:
+            texto = f.read()
+        nome_sugestao = nome_traducao
+        self._salvar_com_dialogo(texto, nome_sugestao)
+
+    def _salvar_com_dialogo(self, texto, sugestao_nome):
+        caminho, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar como...",
+            sugestao_nome,
+            "Text Files (*.txt);;All Files (*)"
+        )
+        if caminho:
+            with open(caminho, "w", encoding="utf-8") as f:
+                f.write(texto)

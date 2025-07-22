@@ -1,16 +1,39 @@
 import sys
 import os
 import json
+
+log_path = os.path.join(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__), 'output.log')
+sys.stdout = open(log_path, 'a', encoding='utf-8', buffering=1)
+sys.stderr = sys.stdout
+
+if getattr(sys, 'frozen', False):
+    bundle_dir = os.path.dirname(sys.executable)
+    os.environ["XDG_CACHE_HOME"] = os.path.join(bundle_dir, ".cache")
+    os.makedirs(os.path.join(bundle_dir, ".cache", "whisper"), exist_ok=True)
+else:
+    bundle_dir = os.path.dirname(os.path.abspath(__file__))
+    os.environ["XDG_CACHE_HOME"] = os.path.join(bundle_dir, ".cache")
+    os.makedirs(os.path.join(bundle_dir, ".cache", "whisper"), exist_ok=True)
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QComboBox,
     QLineEdit, QPushButton, QHBoxLayout, QMessageBox, QSpinBox, QFormLayout
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette, QColor, QIcon
+
 from Transcricao_tab_V3 import TranscricaoTab
 from Transcricao_conversão_tab_V3 import ConversaoTab
+from logs_tab import LogsTab
 
-PASTA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+from ffmpeg_utils import garantir_ffmpeg
+
+def get_app_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+PASTA_SCRIPT = get_app_dir()
 CONFIG_PATH = os.path.join(PASTA_SCRIPT, "config.json")
 IDIOMAS = [
     ("auto", "Detectar automático"),
@@ -20,6 +43,18 @@ IDIOMAS = [
     ("fr", "Francês"),
     ("de", "Alemão"),
 ]
+
+def garantir_config():
+    if not os.path.exists(CONFIG_PATH):
+        config_padrao = {
+            "modelo": "small",
+            "idioma": "auto",
+            "max_historico": 20
+        }
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config_padrao, f, indent=2, ensure_ascii=False)
+
+garantir_config()
 
 def get_dark_stylesheet():
     return """
@@ -171,8 +206,6 @@ class ConfigTab(QWidget):
         self.spin_max_hist.setRange(1, 100)
         self.spin_max_hist.setValue(self.config.get("max_historico", 20))
         form.addRow("Máximo histórico:", self.spin_max_hist)
-        self.input_dir_saida = QLineEdit(self.config.get("dir_saida_conversao", "saida_audio"))
-        form.addRow("Pasta saída conversão:", self.input_dir_saida)
         btn_salvar = QPushButton("Salvar configurações")
         btn_salvar.clicked.connect(self.salvar)
         layout.addLayout(form)
@@ -185,7 +218,6 @@ class ConfigTab(QWidget):
         novo_config["modelo"] = self.combo_modelo.currentText()
         novo_config["idioma"] = self.combo_idioma.currentData()
         novo_config["max_historico"] = self.spin_max_hist.value()
-        novo_config["dir_saida_conversao"] = self.input_dir_saida.text().strip() or "saida_audio"
         salvar_config(novo_config)
         self.config = novo_config
         QMessageBox.information(self, "Configurações", "Configurações salvas com sucesso!")
@@ -208,6 +240,17 @@ class SobreTab(QWidget):
         layout.addStretch()
         self.setLayout(layout)
 
+_log_tab_instance = None
+
+def set_log_tab_instance(log_tab):
+    global _log_tab_instance
+    _log_tab_instance = log_tab
+
+def log_interface(mensagem: str):
+    print(mensagem)
+    if _log_tab_instance:
+        _log_tab_instance.adicionar_log(str(mensagem))
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -220,11 +263,19 @@ class MainWindow(QMainWindow):
         self.transcricao_tab = TranscricaoTab()
         self.conversao_tab = ConversaoTab()
         self.config_tab = ConfigTab()
+        self.logs_tab = LogsTab()
+        set_log_tab_instance(self.logs_tab)
         self.tabs.addTab(self.transcricao_tab, "Transcrição")
         self.tabs.addTab(self.conversao_tab, "Conversão")
         self.tabs.addTab(self.config_tab, "Configurações")
+        self.tabs.addTab(self.logs_tab, "Logs")
         self.tabs.addTab(SobreTab(), "Sobre")
         self.setCentralWidget(self.tabs)
+        self.tabs.currentChanged.connect(self.atualizar_aba_transcricao)
+
+    def atualizar_aba_transcricao(self, idx):
+        if self.tabs.widget(idx) == self.transcricao_tab:
+            self.transcricao_tab.atualizar_config_interface()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

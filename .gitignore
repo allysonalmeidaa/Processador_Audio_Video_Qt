@@ -8,6 +8,8 @@ __pycache__/
 .Python
 .venv/
 venv/
+.venv-novo/
+venv-novo/
 
 # Temporários
 temp_*.wav
