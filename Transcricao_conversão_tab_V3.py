@@ -1,130 +1,203 @@
 import os
+import sys
+import json
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTextEdit, QFileDialog, QCheckBox, QMessageBox
+    QWidget, QLabel, QFileDialog, QVBoxLayout, QHBoxLayout,
+    QCheckBox, QMessageBox, QPushButton, QLineEdit, QTextEdit, QSizePolicy
 )
-from PyQt6.QtCore import Qt
-from Processamento_video import processar_video
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
+from Processamento_video import (
+    processar_video, criar_diretorio_saida
+)
+
+from logs_tab import adicionar_log
+
+def get_app_dir():
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    app_dir = os.path.join(base_dir, "ProcessadorDeAudioVideo")
+    if not os.path.exists(app_dir):
+        os.makedirs(app_dir, exist_ok=True)
+    return app_dir
+
+PASTA_SCRIPT = get_app_dir()
+CONFIG_PATH = os.path.join(PASTA_SCRIPT, "config.json")
+
+class ConversaoWorker(QObject):
+    finished = pyqtSignal(list)  # arquivos_convertidos
+    log = pyqtSignal(str)
+
+    def __init__(self, origem, formatos, diretorio_saida, parent_widget=None):
+        super().__init__()
+        self.origem = origem
+        self.formatos = formatos
+        self.diretorio_saida = diretorio_saida
+        self.parent_widget = parent_widget
+
+    def run(self):
+        self.log.emit("Processando...\n")
+        adicionar_log(f"Iniciando processamento de conversão: origem={self.origem}, formatos={self.formatos}")
+        caminho_video, arquivos_gerados = processar_video(
+            self.origem, self.diretorio_saida, self.formatos, parent_widget=self.parent_widget
+        )
+        if arquivos_gerados:
+            self.log.emit("Arquivos gerados:")
+            adicionar_log(f"Arquivos gerados: {', '.join(os.path.basename(a) for a in arquivos_gerados)}")
+            for arquivo in arquivos_gerados:
+                self.log.emit(os.path.basename(arquivo))
+                adicionar_log(f"Arquivo convertido: {arquivo}")
+            self.finished.emit(arquivos_gerados)
+        else:
+            self.log.emit("Erro: Nenhum arquivo foi gerado.")
+            adicionar_log("Erro: Nenhum arquivo foi gerado na conversão.")
+            self.finished.emit([])
 
 class ConversaoTab(QWidget):
     def __init__(self):
         super().__init__()
+        self.config = self.carregar_config()
+        self.arquivos_convertidos = []
 
         layout = QVBoxLayout()
+        hlayout_origem = QHBoxLayout()
+        self.edit_origem = QLineEdit()
+        self.edit_origem.setPlaceholderText("URL do vídeo ou caminho do arquivo local")
+        hlayout_origem.addWidget(self.edit_origem)
 
-        # Campo para URL ou caminho do arquivo
-        self.label_origem = QLabel("URL do vídeo ou caminho do arquivo local:")
-        self.input_origem = QLineEdit()
-        self.btn_arquivo = QPushButton("Selecionar arquivo")
-        self.btn_arquivo.clicked.connect(self.selecionar_arquivo)
+        self.btn_selecionar_arquivo = QPushButton("Selecionar arquivo")
+        self.btn_selecionar_arquivo.clicked.connect(self.selecionar_arquivo)
+        hlayout_origem.addWidget(self.btn_selecionar_arquivo)
+        layout.addLayout(hlayout_origem)
 
-        origem_layout = QHBoxLayout()
-        origem_layout.addWidget(self.input_origem)
-        origem_layout.addWidget(self.btn_arquivo)
+        lbl_formatos = QLabel("Formatos de saída desejados:")
+        layout.addWidget(lbl_formatos)
 
-        layout.addWidget(self.label_origem)
-        layout.addLayout(origem_layout)
+        self.checkboxes = []
+        # NOVA ORDEM E OPÇÕES: índice, label, id_interno
+        self.formatos = [
+            ("1", "Vídeo original (MP4)"),
+            ("2", "Áudio original (MP3)"),
+            ("3", "Padrão Telefonia (WAV 8kHz)"),
+            ("4", "Alta Qualidade (FLAC 96kHz)"),
+            ("5", "Podcast (M4A)"),
+            ("6", "Streaming (OGG)"),
+            ("7", "Rádio FM (WAV)"),
+            ("8", "WhatsApp (OGG/OPUS)"),
+        ]
+        for idx, text in self.formatos:
+            cb = QCheckBox(text)
+            self.checkboxes.append(cb)
+            layout.addWidget(cb)
 
-        # Checkboxes para formatos
-        self.check_telefonia = QCheckBox("Padrão Telefonia (WAV 8kHz)")
-        self.check_hq = QCheckBox("Alta Qualidade (FLAC 96kHz)")
-        self.check_podcast = QCheckBox("Podcast (M4A)")
-        self.check_stream = QCheckBox("Streaming (OGG)")
-        self.check_radio = QCheckBox("Rádio FM (WAV)")
-        self.check_whatsapp = QCheckBox("WhatsApp (OGG/OPUS)")
+        self.btn_converter = QPushButton("Processar")
+        self.btn_converter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.btn_converter.clicked.connect(self.converter)
+        layout.addWidget(self.btn_converter)
 
-        layout.addWidget(QLabel("Formatos de saída desejados:"))
-        layout.addWidget(self.check_telefonia)
-        layout.addWidget(self.check_hq)
-        layout.addWidget(self.check_podcast)
-        layout.addWidget(self.check_stream)
-        layout.addWidget(self.check_radio)
-        layout.addWidget(self.check_whatsapp)
+        self.text_saida = QTextEdit()
+        self.text_saida.setReadOnly(True)
+        self.text_saida.setMinimumHeight(120)
+        self.text_saida.setStyleSheet("font-size: 12px;")
+        layout.addWidget(self.text_saida)
 
-        # Botão processar
-        self.btn_processar = QPushButton("Processar")
-        self.btn_processar.clicked.connect(self.processar)
-        layout.addWidget(self.btn_processar)
-
-        # Área de resultado
-        self.result_area = QTextEdit()
-        self.result_area.setReadOnly(True)
-        layout.addWidget(self.result_area)
-
-        # --------- NOVO: Botão de download dos arquivos convertidos ---------
-        self.btn_download_convertidos = QPushButton("Baixar Arquivo(s) Convertido(s)")
-        self.btn_download_convertidos.setEnabled(False)
-        self.btn_download_convertidos.clicked.connect(self.baixar_convertidos)
-        layout.addWidget(self.btn_download_convertidos)
-        # --------- FIM NOVO ---------
+        self.btn_baixar = QPushButton("Baixar Arquivo(s) Convertido(s)")
+        self.btn_baixar.clicked.connect(self.baixar_arquivos)
+        layout.addWidget(self.btn_baixar)
 
         self.setLayout(layout)
 
-        # Para armazenar os arquivos convertidos da última operação
-        self._arquivos_convertidos = []
+        self.thread = None
+        self.worker = None
+
+    def carregar_config(self):
+        if os.path.exists(CONFIG_PATH):
+            try:
+                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
 
     def selecionar_arquivo(self):
         fname, _ = QFileDialog.getOpenFileName(
-            self, "Selecione um arquivo de vídeo ou áudio",
-            "", "Vídeo/Áudio (*.mp4 *.mkv *.avi *.mov *.mp3 *.wav *.ogg *.flac *.m4a)"
+            self, "Selecione um arquivo de áudio ou vídeo",
+            "", "Áudio/Vídeo (*.mp3 *.mp4 *.wav *.m4a *.ogg *.flac)"
         )
         if fname:
-            self.input_origem.setText(fname)
+            self.edit_origem.setText(fname)
+            adicionar_log(f"Arquivo selecionado para conversão: {fname}")
 
-    def processar(self):
-        origem = self.input_origem.text().strip()
+    def converter(self):
+        self.text_saida.clear()
+        origem = self.edit_origem.text().strip()
         if not origem:
-            QMessageBox.warning(self, "Aviso", "Informe uma URL ou selecione um arquivo.")
+            QMessageBox.warning(self, "Aviso", "Informe a origem (URL ou arquivo local).")
+            adicionar_log("Tentativa de conversão sem origem informada.")
             return
-        formatos = []
-        if self.check_telefonia.isChecked(): formatos.append('1')
-        if self.check_hq.isChecked(): formatos.append('2')
-        if self.check_podcast.isChecked(): formatos.append('3')
-        if self.check_stream.isChecked(): formatos.append('4')
-        if self.check_radio.isChecked(): formatos.append('5')
-        if self.check_whatsapp.isChecked(): formatos.append('6')
+
+        # Identificadores (veja Processamento_video.py)
+        formatos = [f[0] for f, cb in zip(self.formatos, self.checkboxes) if cb.isChecked()]
         if not formatos:
-            QMessageBox.warning(self, "Aviso", "Selecione ao menos um formato de saída!")
-            return
-        saida_dir = os.path.join(os.path.dirname(__file__), "saida_audio")
-        os.makedirs(saida_dir, exist_ok=True)
-
-        self.result_area.setPlainText("Processando...\n")
-        self._arquivos_convertidos = []  # Limpa antes de nova operação
-        self.btn_download_convertidos.setEnabled(False)
-        try:
-            caminho_video, arquivos_gerados = processar_video(origem, saida_dir, formatos)
-            if arquivos_gerados:
-                self._arquivos_convertidos = arquivos_gerados
-                msg = "Arquivos gerados com sucesso:\n\n"
-                for f in arquivos_gerados:
-                    msg += f"{os.path.basename(f)}\n"
-                self.result_area.setPlainText(msg)
-                self.btn_download_convertidos.setEnabled(True)
-            else:
-                self.result_area.setPlainText("Nenhum arquivo foi gerado.")
-                self.btn_download_convertidos.setEnabled(False)
-        except Exception as e:
-            self.result_area.setPlainText(f"Erro durante o processamento:\n{str(e)}")
-            self._arquivos_convertidos = []
-            self.btn_download_convertidos.setEnabled(False)
-
-    def baixar_convertidos(self):
-        if not self._arquivos_convertidos:
-            QMessageBox.warning(self, "Aviso", "Nenhum arquivo convertido para baixar.")
+            QMessageBox.warning(self, "Aviso", "Selecione pelo menos um formato de saída.")
+            adicionar_log("Tentativa de conversão sem formatos selecionados.")
             return
 
-        for caminho_original in self._arquivos_convertidos:
-            nome_sugestao = os.path.basename(caminho_original)
-            caminho_destino, _ = QFileDialog.getSaveFileName(
-                self,
-                f"Salvar {nome_sugestao} como...",
-                nome_sugestao,
-                "Todos os Arquivos (*.*)"
-            )
-            if caminho_destino:
-                try:
-                    with open(caminho_original, "rb") as src, open(caminho_destino, "wb") as dst:
-                        dst.write(src.read())
-                except Exception as e:
-                    QMessageBox.critical(self, "Erro ao salvar", f"Não foi possível salvar {nome_sugestao}: {str(e)}")
+        diretorio_saida = os.path.join(get_app_dir(), "saida_audio")
+        if not os.path.exists(diretorio_saida):
+            os.makedirs(diretorio_saida, exist_ok=True)
+            adicionar_log(f"Diretório de saída criado: {diretorio_saida}")
+
+        self.btn_converter.setEnabled(False)
+        self.btn_baixar.setEnabled(False)
+        self.btn_selecionar_arquivo.setEnabled(False)
+        for cb in self.checkboxes:
+            cb.setEnabled(False)
+        self.edit_origem.setEnabled(False)
+        adicionar_log("Processamento de conversão iniciado.")
+
+        self.thread = QThread()
+        self.worker = ConversaoWorker(origem, formatos, diretorio_saida, parent_widget=self)
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.conversao_finalizada)
+        self.worker.log.connect(self.text_saida.append)
+        self.worker.log.connect(adicionar_log)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def conversao_finalizada(self, arquivos_gerados):
+        self.arquivos_convertidos = arquivos_gerados
+        self.btn_converter.setEnabled(True)
+        self.btn_baixar.setEnabled(True)
+        self.btn_selecionar_arquivo.setEnabled(True)
+        for cb in self.checkboxes:
+            cb.setEnabled(True)
+        self.edit_origem.setEnabled(True)
+        if arquivos_gerados:
+            adicionar_log("Conversão finalizada com sucesso.")
+        else:
+            adicionar_log("Conversão finalizada sem arquivos gerados.")
+
+    def baixar_arquivos(self):
+        if not self.arquivos_convertidos:
+            QMessageBox.information(self, "Baixar Arquivo(s)", "Nenhum arquivo convertido disponível para baixar.")
+            adicionar_log("Tentativa de download sem arquivos convertidos disponíveis.")
+            return
+        target_dir = QFileDialog.getExistingDirectory(self, "Selecione a pasta para salvar os arquivos")
+        if not target_dir:
+            adicionar_log("Download cancelado: pasta de destino não selecionada.")
+            return
+        import shutil
+        for arquivo in self.arquivos_convertidos:
+            try:
+                shutil.copy(arquivo, target_dir)
+                adicionar_log(f"Arquivo copiado para {target_dir}: {arquivo}")
+            except Exception as e:
+                QMessageBox.warning(self, "Erro ao copiar arquivo", f"Falha ao copiar {arquivo}: {str(e)}")
+                adicionar_log(f"Erro ao copiar {arquivo} para {target_dir}: {str(e)}")
+        QMessageBox.information(self, "Download concluído", "Arquivo(s) copiado(s) com sucesso!")
+        adicionar_log(f"Download concluído para pasta: {target_dir}")

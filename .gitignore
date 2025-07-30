@@ -6,10 +6,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 .Python
-.venv/
-venv/
 .venv-novo/
 venv-novo/
+.git/
 
 # Temporários
 temp_*.wav

@@ -1,5 +1,6 @@
 {
   "modelo": "tiny",
   "max_historico": 20,
-  "idioma": "pt"
+  "idioma": "pt",
+  "aviso_tamanho_mb": 300
 }
