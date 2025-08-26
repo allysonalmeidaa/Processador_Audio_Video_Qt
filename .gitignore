@@ -8,7 +8,10 @@ __pycache__/
 .Python
 .venv-novo/
 venv-novo/
+.venv-minimo/
+venv-minimo/
 .git/
+.vscode/
 
 # Temporários
 temp_*.wav

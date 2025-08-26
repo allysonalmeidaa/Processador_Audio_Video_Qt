@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
 from Transcricao_tab_V3 import TranscricaoTab
-from Transcricao_conversão_tab_V3 import ConversaoTab
+from Transcricao_conversao_tab_V3 import ConversaoTab
 from logs_tab import LogsTab, adicionar_log
 
 APP_FOLDER_NAME = "ProcessadorDeAudioVideo"
