@@ -1,4 +1,4 @@
-# Processador de Áudio e Vídeo (Qt) - Versão 3.0
+# Processador de Áudio e Vídeo (Qt) - Versão 3.1
 
 Aplicativo desktop para transcrição automática de arquivos de áudio e vídeo, conversão de formatos e análise de voz, com interface gráfica Qt.
 Nesta nova versão, foram implementadas melhorias no projeto, como adição de console na aba de Transcrição, inserção de tema claro, melhoria no tratamento de de dados para conversão de arquivos, dentre outras melhorias.
@@ -21,6 +21,7 @@ Nesta nova versão, foram implementadas melhorias no projeto, como adição de c
 - **Aba de logs detalhados**: Visualização direta na interface.
 - **Fonte adaptativa**: Tamanho de fonte para transcrição, adaptável pelo usuário.
 - **Abertura de prompt**: Abertura do prompt de comando durante execução resolvida.
+- **Ajustes em scripts** : Ajustes realizados para diminuição do tamanho do arquivo .exe gerado.
 
 
 ---
