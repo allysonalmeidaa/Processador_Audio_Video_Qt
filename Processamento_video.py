@@ -9,8 +9,8 @@ from erros_usuario import registrar_erro_usuario
 from ffmpeg_utils import garantir_ffmpeg
 from logs_tab import adicionar_log
 
-# --- CENTRALIZAÇÃO DOS ARQUIVOS NA PASTA DO APP ---
 def get_app_dir():
+    # Diretório raiz do projeto/pasta de dados do app, multiplataforma
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -127,13 +127,15 @@ def gerar_mp4(caminho_origem, caminho_saida, nome_base, parent_widget=None):
             destino
         ]
         startupinfo = None
+        creationflags = 0
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            creationflags = subprocess.CREATE_NO_WINDOW
         processo = subprocess.run(
             comando,
             capture_output=True, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            creationflags=creationflags,
             startupinfo=startupinfo
         )
         if processo.returncode == 0 and os.path.exists(destino):
@@ -167,13 +169,15 @@ def gerar_mp3(caminho_video, caminho_saida, nome_base, parent_widget=None):
             caminho_audio
         ]
         startupinfo = None
+        creationflags = 0
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            creationflags = subprocess.CREATE_NO_WINDOW
         processo = subprocess.run(
             comando,
             capture_output=True, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            creationflags=creationflags,
             startupinfo=startupinfo
         )
         if processo.returncode == 0 and os.path.exists(caminho_audio):
@@ -197,12 +201,14 @@ def converter_generico(cmd_args, output_path, log_success, log_fail, parent_widg
             return None
         comando = [ffmpeg_cmd] + cmd_args + ['-y', output_path]
         startupinfo = None
+        creationflags = 0
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            creationflags = subprocess.CREATE_NO_WINDOW
         processo = subprocess.run(
             comando, capture_output=True, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            creationflags=creationflags,
             startupinfo=startupinfo
         )
         if processo.returncode == 0 and os.path.exists(output_path):

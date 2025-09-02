@@ -6,12 +6,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 .Python
-.venv-novo/
-venv-novo/
-.venv-minimo/
-venv-minimo/
+.venv/
+venv/
 .git/
-.vscode/
+build/
+dist/
+ProcessadorDeAudioVideo/
 
 # Temporários
 temp_*.wav

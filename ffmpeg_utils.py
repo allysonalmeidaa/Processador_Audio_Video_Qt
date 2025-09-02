@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QMessageBox
 from logs_tab import adicionar_log
 
 def get_app_dir():
+    # Diretório raiz do projeto/pasta de dados do app, multiplataforma
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -18,8 +19,9 @@ def get_app_dir():
 
 def garantir_ffmpeg(window_parent=None, log_callback=None):
     """
-    Garante que o FFmpeg esteja disponível. Se não estiver, tenta baixar para a pasta do app.
+    Garante que o FFmpeg esteja disponível. Se não estiver, tenta baixar para a pasta do app (apenas no Windows).
     Retorna o caminho do executável ffmpeg.
+    Compatível com Linux e Windows.
     """
     ffmpeg_bin = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
     pasta_app = get_app_dir()
@@ -30,7 +32,7 @@ def garantir_ffmpeg(window_parent=None, log_callback=None):
         adicionar_log(f"FFmpeg encontrado na pasta do app: {ffmpeg_path}")
         return ffmpeg_path
 
-    # 2. Verifica no PATH do sistema
+    # 2. Verifica no PATH do sistema (Linux e Windows)
     ffmpeg_global = shutil.which(ffmpeg_bin)
     if ffmpeg_global:
         adicionar_log(f"FFmpeg encontrado no PATH do sistema: {ffmpeg_global}")

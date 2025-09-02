@@ -4,9 +4,10 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPlainTextEdit, QPushButton, QFileDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtCore import pyqtSignal, QObject
 
 def get_app_dir():
+    # Diretório raiz do projeto/pasta de dados do app, multiplataforma
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:

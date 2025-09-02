@@ -1,12 +1,15 @@
+import gc
 import os
 import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from memory_utils import clear_memory
+
 import traceback
 
 from ffmpeg_utils import garantir_ffmpeg
 
-import whisper
 from datetime import timedelta
-from diarizacao_resemblyzer import diarize_audio
 from erros_usuario import registrar_erro_usuario
 from PyQt6.QtCore import QCoreApplication
 import subprocess
@@ -50,6 +53,10 @@ def remove_repeticoes(segments):
 
 def baixar_e_avisa_modelo(modelo, progresso_callback=None):
     try:
+        try:
+            import whisper
+        except ImportError as e:
+            raise RuntimeError(f"Whisper não disponível: {e}")
         cache_dir = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
         model_path = os.path.join(cache_dir, "whisper", f"{modelo}.pt")
         if not os.path.exists(model_path):
@@ -82,6 +89,11 @@ def transcrever_com_diarizacao(caminho_arquivo, modelo_escolhido, idioma=None, p
     caminho_audio_temp = None
 
     try:
+        try:
+            import whisper
+            from diarizacao_resemblyzer import diarize_audio 
+        except ImportError as e:
+            raise RuntimeError(f"Bibliotecas não disponíveis: {e}")
         adicionar_log(f"Iniciando transcrição para o arquivo '{caminho_arquivo}'.")
         if progresso_callback:
             progresso_callback(5, "Extraindo arquivo")
@@ -200,7 +212,7 @@ def transcrever_com_diarizacao(caminho_arquivo, modelo_escolhido, idioma=None, p
 
         try:
             adicionar_log("Iniciando transcrição com Whisper.")
-            resultado = modelo.transcribe(caminho_arquivo_para_diarizacao, **kwargs)
+            resultado = modelo.transcribe(caminho_arquivo_para_diarizacao, **kwargs, verbose=False)
         except Exception as e:
             registrar_erro_usuario(
                 "Transcrição",
@@ -307,6 +319,16 @@ def transcrever_com_diarizacao(caminho_arquivo, modelo_escolhido, idioma=None, p
         print(traceback.format_exc())
         raise
     finally:
+        try: 
+            clear_memory()
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            gc.collect()
+        except Exception as e:
+            print(f"Erro na limpeza final: {e}")
+            
         if caminho_audio_temp and os.path.exists(caminho_audio_temp):
             try:
                 os.remove(caminho_audio_temp)
