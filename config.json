@@ -2,5 +2,7 @@
   "modelo": "tiny",
   "max_historico": 20,
   "idioma": "pt",
-  "aviso_tamanho_mb": 300
+  "aviso_tamanho_mb": 300,
+  "tema": "escuro",
+  "tamanho_fonte_transcricao": 14
 }

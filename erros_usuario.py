@@ -6,6 +6,7 @@ from datetime import datetime
 from logs_tab import adicionar_log
 
 def get_app_dir():
+    # Diretório raiz do projeto/pasta de dados do app, multiplataforma
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:

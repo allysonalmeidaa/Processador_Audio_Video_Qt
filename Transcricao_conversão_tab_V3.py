@@ -13,6 +13,7 @@ from Processamento_video import (
 from logs_tab import adicionar_log
 
 def get_app_dir():
+    # Diretório raiz do projeto/pasta de dados do app, multiplataforma
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -111,6 +112,15 @@ class ConversaoTab(QWidget):
         self.thread = None
         self.worker = None
 
+    def closeEvent(self, event):
+        # Finaliza a thread se ainda estiver rodando ao fechar o widget
+        if self.thread and self.thread.isRunning():
+            print("[DEBUG] Finalizando thread de conversão ao fechar o tab...")
+            self.thread.quit()
+            self.thread.wait()
+            self.thread = None
+        event.accept()
+
     def carregar_config(self):
         if os.path.exists(CONFIG_PATH):
             try:
@@ -181,6 +191,12 @@ class ConversaoTab(QWidget):
             adicionar_log("Conversão finalizada com sucesso.")
         else:
             adicionar_log("Conversão finalizada sem arquivos gerados.")
+        # FINALIZAÇÃO DA THREAD (boa prática)
+        if self.thread:
+            print("[DEBUG] Finalizando thread no slot conversao_finalizada")
+            self.thread.quit()
+            self.thread.wait()
+            self.thread = None
 
     def baixar_arquivos(self):
         if not self.arquivos_convertidos:
