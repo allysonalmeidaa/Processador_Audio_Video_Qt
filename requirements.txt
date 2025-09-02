@@ -65,6 +65,8 @@ protobuf==6.32.0
 pycparser==2.22
 pyinstaller==6.15.0
 pyinstaller-hooks-contrib==2025.8
+pyinstaller==6.15.0
+pyinstaller-hooks-contrib==2025.8
 PyQt6==6.9.1
 PyQt6-Qt6==6.9.1
 PyQt6_sip==13.10.2

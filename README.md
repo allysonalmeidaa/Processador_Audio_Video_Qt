@@ -38,12 +38,12 @@ A partir desta versão, o projeto foi **portado para Linux**! Foram realizadas a
  
 **Tela de Transcrição - interface escura**
 <p align="center">
-<img src="img/interfaceprincipal3.png" width="600" alt="Interface escuro">
+<img src="imagens/interface_escuro.png" width="600" alt="Interface escuro">
 </p>
  
 **Tela de Transcrição - interface clara**
 <p align="center">
-<img src="img/interfaceprincipalclaro.png" width="600" alt="Interface claro">
+<img src="imagens/interface_claro.png" width="600" alt="Interface claro">
 </p>
  
 ---
