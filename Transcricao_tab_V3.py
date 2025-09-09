@@ -371,8 +371,8 @@ class TranscricaoThread(QThread):
                         "segments": result["segments"]
                     }
                     
-                except ImportError as e:
-                    print(f"[AVISO] Diarização não disponível: {e}")
+                except (ImportError, Exception) as e:
+                    print(f"[AVISO] Diarização falhou: {e}")
                     # Fallback: retornar apenas transcrição sem diarização
                     return {
                         "success": True,
@@ -439,6 +439,7 @@ class TranscricaoTab(QWidget):
         self.caminho_arquivo = ""
         self.thread = None
         self._historico_cache = []
+        self._historico_filtrado = []  # Initialize filtered history cache
 
         self.setup_ui()
 
@@ -877,6 +878,8 @@ class TranscricaoTab(QWidget):
     def filtrar_historico(self, texto):
         texto = texto.strip().lower()
         self.lista_historico.clear()
+        # Store filtered items to maintain correct mapping
+        self._historico_filtrado = []
         for h in self._historico_cache:
             nome = h['nome'].lower()
             data_str = h['data'].lower()
@@ -885,12 +888,22 @@ class TranscricaoTab(QWidget):
             if texto in nome or texto in data_str or texto in idioma_nome.lower():
                 display = f"{h['nome']}  ({h['data']}, {idioma_nome})"
                 self.lista_historico.addItem(display)
+                self._historico_filtrado.append(h)
 
     def abrir_do_historico(self, item):
         idx = self.lista_historico.currentRow()
-        if idx < 0 or idx >= len(self._historico_cache):
+        # Use filtered list instead of original cache to prevent index mismatch
+        historico_atual = getattr(self, '_historico_filtrado', self._historico_cache)
+        if idx < 0 or idx >= len(historico_atual):
+            QMessageBox.warning(self, "Aviso", "Item do histórico não encontrado!")
             return
-        nome_arquivo = self._historico_cache[idx]["arquivo"]
+        
+        # Get the correct file name from filtered list
+        nome_arquivo = historico_atual[idx].get("arquivo")
+        if not nome_arquivo:
+            QMessageBox.warning(self, "Aviso", "Nome do arquivo não encontrado no histórico!")
+            return
+            
         caminho = os.path.join(TRANSCRICOES_DIR, nome_arquivo)
         if os.path.exists(caminho):
             try:
@@ -905,9 +918,13 @@ class TranscricaoTab(QWidget):
 
     def remover_selecionado(self):
         idx = self.lista_historico.currentRow()
-        if idx < 0 or idx >= len(self._historico_cache):
+        # Use filtered list instead of original cache to prevent index mismatch
+        historico_atual = getattr(self, '_historico_filtrado', self._historico_cache)
+        if idx < 0 or idx >= len(historico_atual):
+            QMessageBox.warning(self, "Aviso", "Nenhum item selecionado para remoção!")
             return
-        to_remove = self._historico_cache[idx]
+        
+        to_remove = historico_atual[idx]
         historico = self._ler_historico_arquivo()
         historico = [h for h in historico if h["arquivo"] != to_remove["arquivo"]]
         self._salvar_historico_arquivo(historico)
@@ -937,22 +954,56 @@ class TranscricaoTab(QWidget):
 
     def baixar_traducao(self):
         if not self.caminho_arquivo:
-            QMessageBox.warning(self, "Aviso", "Nenhuma tradução para baixar.")
+            QMessageBox.warning(self, "Aviso", "Nenhum arquivo selecionado. Tradução não disponível.")
             return
         
         base = os.path.splitext(os.path.basename(self.caminho_arquivo))[0]
-        nome_traducao = f"transcricao_{base}_ingles.txt"
-        caminho_trad = os.path.join(TRANSCRICOES_DIR, nome_traducao)
+        # Try multiple possible translation file patterns
+        possible_names = [
+            f"transcricao_{base}_ingles.txt",
+            f"transcricao_{base}_en.txt", 
+            f"traducao_{base}.txt",
+            f"{base}_traducao.txt",
+            f"{base}_english.txt"
+        ]
         
-        if not os.path.exists(caminho_trad):
-            QMessageBox.warning(self, "Aviso", "Arquivo de tradução não encontrado.")
+        arquivo_encontrado = None
+        caminho_trad = None
+        
+        # Search for existing translation file
+        for nome_traducao in possible_names:
+            caminho_temp = os.path.join(TRANSCRICOES_DIR, nome_traducao)
+            if os.path.exists(caminho_temp):
+                arquivo_encontrado = nome_traducao
+                caminho_trad = caminho_temp
+                break
+        
+        if not arquivo_encontrado:
+            # Try to find any translation file for this base name
+            if os.path.exists(TRANSCRICOES_DIR):
+                for filename in os.listdir(TRANSCRICOES_DIR):
+                    if base in filename and any(term in filename.lower() for term in ['ingles', 'english', 'traducao', '_en']):
+                        arquivo_encontrado = filename
+                        caminho_trad = os.path.join(TRANSCRICOES_DIR, filename)
+                        break
+        
+        if not arquivo_encontrado:
+            QMessageBox.warning(self, "Aviso", 
+                f"Arquivo de tradução não encontrado.\n\n"
+                f"Tentativas:\n" + "\n".join(f"• {name}" for name in possible_names) + 
+                f"\n\nCertifique-se de que a tradução foi gerada durante a transcrição.")
             return
         
         try:
             with open(caminho_trad, "r", encoding="utf-8") as f:
                 texto = f.read()
-            self._salvar_com_dialogo(texto, nome_traducao)
-            self.adicionar_log_console(f"Tradução salva como: {nome_traducao}")
+            
+            if not texto.strip():
+                QMessageBox.warning(self, "Aviso", "O arquivo de tradução está vazio.")
+                return
+                
+            self._salvar_com_dialogo(texto, arquivo_encontrado)
+            self.adicionar_log_console(f"Tradução baixada: {arquivo_encontrado}")
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao ler tradução: {str(e)}")
 

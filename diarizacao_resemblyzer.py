@@ -169,28 +169,46 @@ def diarize_audio(audio_path, window=1.5, overlap=0.75, dbscan_eps=0.6, dbscan_m
     """
     adicionar_log(f"Iniciando diarização do áudio: {audio_path}")
     
+    # First, create a safe fallback function
+    def fallback_diarization(audio_path):
+        """Fallback seguro para quando a diarização não funciona"""
+        try:
+            wav, sr = librosa.load(audio_path, sr=16000)
+            duration = len(wav) / sr
+            adicionar_log(f"Usando diarização fallback (speaker único) para áudio de {duration:.1f}s")
+            return [(0.0, duration, "speaker_0")]
+        except Exception as fallback_error:
+            adicionar_log(f"Erro até no fallback: {fallback_error}")
+            return [(0.0, 60.0, "speaker_0")]  # Last resort fallback
+    
     try:
         # Tenta importar Resemblyzer (pode falhar em alguns sistemas)
         try:
             from resemblyzer import VoiceEncoder
         except ImportError as e:
             adicionar_log(f"Resemblyzer não disponível: {e}")
-            # Fallback: diarização simulada
-            wav, sr = librosa.load(audio_path, sr=16000)
-            duration = len(wav) / sr
-            return [(0.0, duration, "speaker_0")]
+            return fallback_diarization(audio_path)
+        except Exception as e:
+            adicionar_log(f"Erro ao importar Resemblyzer: {e}")
+            return fallback_diarization(audio_path)
         
         # Garante o modelo Resemblyzer
-        pretrained_model_path = ensure_pretrained_in_temp()
-        if not pretrained_model_path or not os.path.exists(pretrained_model_path):
-            adicionar_log(f"Modelo Resemblyzer não encontrado, usando fallback")
+        try:
+            pretrained_model_path = ensure_pretrained_in_temp()
+            if not pretrained_model_path or not os.path.exists(pretrained_model_path):
+                adicionar_log(f"Modelo Resemblyzer não encontrado, usando fallback")
+                return fallback_diarization(audio_path)
+        except Exception as e:
+            adicionar_log(f"Erro ao garantir modelo Resemblyzer: {e}")
+            return fallback_diarization(audio_path)
+
+        try:
+            audio_path = os.path.abspath(audio_path)
             wav, sr = librosa.load(audio_path, sr=16000)
             duration = len(wav) / sr
-            return [(0.0, duration, "speaker_0")]
-
-        audio_path = os.path.abspath(audio_path)
-        wav, sr = librosa.load(audio_path, sr=16000)
-        duration = len(wav) / sr
+        except Exception as e:
+            adicionar_log(f"Erro ao carregar áudio: {e}")
+            return fallback_diarization(audio_path)
 
         adicionar_log(f"Áudio carregado, duração: {duration:.2f}s, sample rate: {sr}")
 
@@ -215,8 +233,12 @@ def diarize_audio(audio_path, window=1.5, overlap=0.75, dbscan_eps=0.6, dbscan_m
 
         adicionar_log(f"Total de segmentos para diarização: {len(segments)}")
 
-        encoder = VoiceEncoder()
-        adicionar_log("Modelo de voz Resemblyzer carregado.")
+        try:
+            encoder = VoiceEncoder()
+            adicionar_log("Modelo de voz Resemblyzer carregado.")
+        except Exception as e:
+            adicionar_log(f"Erro ao criar VoiceEncoder: {e}")
+            return fallback_diarization(audio_path)
 
         # Extrai embeddings em lotes para melhor performance
         embeddings = []
@@ -229,12 +251,20 @@ def diarize_audio(audio_path, window=1.5, overlap=0.75, dbscan_eps=0.6, dbscan_m
                 # Preenche com zeros em caso de erro
                 embeddings.append(np.zeros(256))
 
+        if not embeddings:
+            adicionar_log("Nenhum embedding extraído, usando fallback")
+            return fallback_diarization(audio_path)
+
         embeddings = np.array(embeddings)
         adicionar_log("Embeddings extraídos de todos os segmentos.")
 
-        # Clustering com DBSCAN
-        clustering = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples).fit(embeddings)
-        labels = clustering.labels_
+        try:
+            # Clustering com DBSCAN
+            clustering = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples).fit(embeddings)
+            labels = clustering.labels_
+        except Exception as e:
+            adicionar_log(f"Erro no clustering DBSCAN: {e}")
+            return fallback_diarization(audio_path)
 
         adicionar_log(f"Clustering DBSCAN realizado. Labels únicos: {set(labels)}")
 
@@ -247,14 +277,18 @@ def diarize_audio(audio_path, window=1.5, overlap=0.75, dbscan_eps=0.6, dbscan_m
         # APLICA PÓS-PROCESSAMENTO PARA MELHORAR QUALIDADE
         adicionar_log("Aplicando pós-processamento...")
         
-        # 1. Remove repetições
-        diarization_result = remove_repeticoes(diarization_result, threshold=0.7)
-        
-        # 2. Funde segmentos muito curtos
-        diarization_result = merge_short_segments(diarization_result, min_duration=0.8)
-        
-        # 3. Suaviza transições entre speakers
-        diarization_result = smooth_speaker_transitions(diarization_result, gap_threshold=1.2)
+        try:
+            # 1. Remove repetições
+            diarization_result = remove_repeticoes(diarization_result, threshold=0.7)
+            
+            # 2. Funde segmentos muito curtos
+            diarization_result = merge_short_segments(diarization_result, min_duration=0.8)
+            
+            # 3. Suaviza transições entre speakers
+            diarization_result = smooth_speaker_transitions(diarization_result, gap_threshold=1.2)
+        except Exception as e:
+            adicionar_log(f"Erro no pós-processamento: {e}")
+            # Continue with raw results if post-processing fails
 
         if verbose:
             speakers = set(l for l in labels if l != -1)
@@ -271,9 +305,4 @@ def diarize_audio(audio_path, window=1.5, overlap=0.75, dbscan_eps=0.6, dbscan_m
         adicionar_log(f"Traceback: {traceback.format_exc()}")
         
         # Fallback seguro
-        try:
-            wav, sr = librosa.load(audio_path, sr=16000)
-            duration = len(wav) / sr
-            return [(0.0, duration, "speaker_0")]
-        except:
-            return [(0.0, 60.0, "speaker_0")]
+        return fallback_diarization(audio_path)

@@ -93,7 +93,20 @@ def transcrever_com_diarizacao(caminho_arquivo, modelo_escolhido, idioma=None, p
             import whisper
             from diarizacao_resemblyzer import diarize_audio 
         except ImportError as e:
-            raise RuntimeError(f"Bibliotecas não disponíveis: {e}")
+            adicionar_log(f"Aviso: Bibliotecas de diarização não disponíveis: {e}")
+            # Use simple transcription without diarization as fallback
+            import whisper
+            def diarize_audio(path, verbose=True):
+                """Fallback simples quando diarização não está disponível"""
+                import librosa
+                try:
+                    duration = librosa.get_duration(path=path)
+                    return [(0.0, duration, "speaker_0")]
+                except:
+                    return [(0.0, 60.0, "speaker_0")]
+        except Exception as e:
+            adicionar_log(f"Erro crítico ao importar dependências: {e}")
+            raise RuntimeError(f"Dependências não disponíveis: {e}")
         adicionar_log(f"Iniciando transcrição para o arquivo '{caminho_arquivo}'.")
         if progresso_callback:
             progresso_callback(5, "Extraindo arquivo")
@@ -171,8 +184,19 @@ def transcrever_com_diarizacao(caminho_arquivo, modelo_escolhido, idioma=None, p
             adicionar_log("Transcrição cancelada pelo usuário antes da diarização.")
             raise Exception("Transcrição cancelada pelo usuário.")
 
-        diarization = diarize_audio(caminho_arquivo_para_diarizacao, verbose=True)
-        adicionar_log("Diarização concluída.")
+        try:
+            diarization = diarize_audio(caminho_arquivo_para_diarizacao, verbose=True)
+            adicionar_log("Diarização concluída.")
+        except Exception as e:
+            adicionar_log(f"Erro na diarização: {e}")
+            adicionar_log("Continuando com fallback de speaker único.")
+            # Create fallback diarization result
+            try:
+                import librosa
+                duration = librosa.get_duration(path=caminho_arquivo_para_diarizacao)
+                diarization = [(0.0, duration, "speaker_0")]
+            except:
+                diarization = [(0.0, 60.0, "speaker_0")]  # Last resort fallback
 
         if progresso_callback:
             progresso_callback(40, "Diarização concluída")
